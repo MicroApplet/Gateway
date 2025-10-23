@@ -17,6 +17,7 @@
 package com.asialjim.microapplet.gateway.config;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -34,19 +35,20 @@ import java.io.Serializable;
  * @since 2025/9/24, &nbsp;&nbsp; <em>version:1.0</em>
  */
 @Data
+@Slf4j
 @RefreshScope
 @Configuration
-@ConfigurationProperties(prefix = "feign.auth.user")
+@ConfigurationProperties(prefix = "feign.gateway.auth")
 public class AuthServerProperty implements Serializable {
     @Serial
     private static final long serialVersionUID = -899675679406861833L;
-//    @Value("${feign.auth.user.auth}")
     private String auth;
-//    @Value("${feign.auth.user.auth-path}")
     private String authPath;
 
     public String authUrl(String token) {
         String path = (StringUtils.startsWith(authPath, "/") ? StringUtils.EMPTY : "/") + authPath;
-        return String.format("lb://%s%s?token=%s", auth, path, token);
+        String format = String.format("lb://%s%s?token=%s", auth, path, token);
+        log.info("登录认证地址：{}", format);
+        return format;
     }
 }
