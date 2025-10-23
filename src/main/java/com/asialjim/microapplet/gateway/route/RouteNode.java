@@ -19,6 +19,7 @@ package com.asialjim.microapplet.gateway.route;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -41,24 +42,43 @@ public class RouteNode implements Serializable {
      * 路由名称
      */
     private String name;
+
+    private Prefix prefix;
+
     /**
      * 匹配规则, 仅基于path
      */
     private String path;
-    
+
     /**
      * 是否需要登录
      */
     @JsonAlias("enable-auth")
     private Boolean enableAuth;
-
     /**
      * 路由服务
      */
     private String service;
+    private Boolean http;
+
+    private String remark;
 
 
-    public boolean enableAuth(){
+    public Prefix getPrefix() {
+        return Optional.ofNullable(this.prefix).orElse(Prefix.rest);
+    }
+
+    public String getPath() {
+        return StringUtils.startsWith(path, "/") ? path.substring(1) : path;
+    }
+
+
+    public boolean http(){
+        return  Optional.ofNullable(this.http).orElse(false);
+    }
+
+
+    public boolean enableAuth() {
         return Optional.ofNullable(this.enableAuth).orElse(true);
     }
 }

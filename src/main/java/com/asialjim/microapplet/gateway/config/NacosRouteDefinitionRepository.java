@@ -30,6 +30,7 @@ import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.filter.FilterDefinition;
 import org.springframework.cloud.gateway.handler.predicate.PredicateDefinition;
+import org.springframework.cloud.gateway.route.Route;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionRepository;
 import org.springframework.context.*;
@@ -96,8 +97,15 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         this.routes.clear();
         final StringJoiner routeJ = new StringJoiner("\r\n\t————————————");
         List<RouteNode> routes = routeConfigProperty.getRoutes();
-        routes.stream().map(this::convertToRouteDefinition).forEach(item -> addRoute(routeJ,item));
-        addRoute(routeJ, route404());
+
+        for (RouteNode route : routes) {
+            RouteDefinition definition = convertToRouteDefinition(routeJ, route);
+            this.routes.add(definition);
+        }
+        this.routes.add(route404());
+
+        //routes.stream().map(this::convertToRouteDefinition).forEach(item -> addRoute(routeJ,item));
+        //addRoute(routeJ, route404());
         log.info("加载路由表{}", routeJ);
 
         // 发布路由刷新事件
@@ -108,7 +116,7 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
                 });
     }
 
-    private void addRoute(StringJoiner routeLog, RouteDefinition route) {
+    /*private void addRoute(StringJoiner routeLog, RouteDefinition route) {
         if (Objects.isNull(route))
             return;
 
@@ -147,7 +155,7 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         }
 
         routeLog.add(sb);
-    }
+    }*/
 
     private RouteDefinition route404() {
         RouteDefinition definition = new RouteDefinition();
@@ -171,38 +179,52 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
 
         definition.setFilters(filters);
         return definition;
-
     }
 
     /**
      * 将RouteNode转换为RouteDefinition
      */
-    private RouteDefinition convertToRouteDefinition(RouteNode routeNode) {
+    private RouteDefinition convertToRouteDefinition(StringJoiner routeJ, RouteNode routeNode) {
         RouteDefinition definition = new RouteDefinition();
-        definition.setId(routeNode.getName());
-        definition.setUri(URI.create("lb://" + routeNode.getService()));
+        String name = routeNode.getName();
+        String prefix = routeNode.getPrefix().name();
+        String path = "/api/" + prefix + "/" + routeNode.getPath() + "/**";
+        boolean enableAuth = routeNode.enableAuth();
+        String service = routeNode.getService();
+        String remark = routeNode.getRemark();
+        URI uri = URI.create("lb://" + service);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("\r\n\t").append("路由:").append("\t").append(name);
+        sb.append("\r\n\t").append("规则:").append("\t").append(path);
+        sb.append("\r\n\t").append("转发:").append("\t").append(uri);
+        sb.append("\r\n\t").append("备注:").append("\t").append(remark);
+
+        definition.setId(name);
+        definition.setUri(uri);
 
         // 设置Predicate
-        boolean enableAuth = routeNode.enableAuth();
-        String path = (enableAuth ? "/api/rest/" : "/api/open/") + routeNode.getPath() + "/**";
-
         PredicateDefinition predicate = new PredicateDefinition();
         predicate.setName("Path");
         predicate.addArg("pattern", path);
-
         definition.setPredicates(Collections.singletonList(predicate));
+
+
+        StringJoiner filterJ = new StringJoiner("; ");
 
         // 设置Filters
         final List<FilterDefinition> filters = new ArrayList<>();
         FilterDefinition TraceFilter = new FilterDefinition();
         TraceFilter.setName("TraceFilter");
         filters.add(TraceFilter);
+        filterJ.add(TraceFilter.getName() + "[链路追踪]");
 
         // StripPrefix Filter
         FilterDefinition stripPrefixFilter = new FilterDefinition();
         stripPrefixFilter.setName("StripPrefix");
         stripPrefixFilter.addArg("parts", "2");
         filters.add(stripPrefixFilter);
+        filterJ.add(stripPrefixFilter.getName() + "=2");
 
         // RewritePath Filter
         FilterDefinition rewritePathFilter = new FilterDefinition();
@@ -210,15 +232,19 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         rewritePathFilter.addArg("regexp", "/" + routeNode.getPath() + "(?<segment>.*)");
         rewritePathFilter.addArg("replacement", "${segment}");
         filters.add(rewritePathFilter);
+        filterJ.add("RewritePath=" + path + "-> /" + routeNode.getPath() + "/**");
 
         // 添加全局过滤器（通过配置方式）
         if (enableAuth) {
             FilterDefinition authFilter = new FilterDefinition();
             authFilter.setName("AuthFilter");
             filters.add(authFilter);
+            filterJ.add("AuthFilter[认证过滤器]");
         }
 
         definition.setFilters(filters);
+        sb.append("\r\n\t").append("拦截:").append("\t").append(filterJ);
+        routeJ.add(sb);
         return definition;
     }
 }
