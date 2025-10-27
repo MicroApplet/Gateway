@@ -64,6 +64,10 @@ public class AuthFilter implements GatewayFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        Boolean isDocumentReq = exchange.getAttribute(DocumentFilter.DOCUMENT_REQUEST_URL_ATTR);
+        if (Boolean.TRUE.equals(isDocumentReq))
+            return chain.filter(exchange);
+
         ServerHttpRequest request = exchange.getRequest();
         ServerHttpResponse response = exchange.getResponse();
 

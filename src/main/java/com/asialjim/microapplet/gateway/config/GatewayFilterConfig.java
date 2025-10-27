@@ -56,4 +56,6 @@ public class GatewayFilterConfig {
     public GatewayFilter global404Filter() {
         return new Global404Filter();
     }
+
+
 }

@@ -39,6 +39,7 @@ import org.springframework.context.event.EventListener;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import javax.print.Doc;
 import java.net.URI;
 import java.util.*;
 
@@ -104,8 +105,6 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         }
         this.routes.add(route404());
 
-        //routes.stream().map(this::convertToRouteDefinition).forEach(item -> addRoute(routeJ,item));
-        //addRoute(routeJ, route404());
         log.info("加载路由表{}", routeJ);
 
         // 发布路由刷新事件
@@ -115,47 +114,6 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
                     log.info("路由刷新完成，当前路由数量: {}", this.routes.size());
                 });
     }
-
-    /*private void addRoute(StringJoiner routeLog, RouteDefinition route) {
-        if (Objects.isNull(route))
-            return;
-
-        this.routes.add(route);
-        StringBuilder sb = new StringBuilder();
-        sb.append("\r\n\t").append("路由:").append("\t").append(route.getId());
-        StringJoiner predicateJ = new StringJoiner(";\t");
-        List<PredicateDefinition> predicates = route.getPredicates();
-        if (CollectionUtils.isNotEmpty(predicates)) {
-            for (PredicateDefinition predicate : predicates) {
-                String name = predicate.getName();
-                Map<String, String> args = predicate.getArgs();
-                if (MapUtils.isEmpty(args)) {
-                    predicateJ.add(name);
-                } else {
-                    predicateJ.add(name + ":" + JsonUtil.instance.toStr(args));
-                }
-            }
-            sb.append("\r\n\t").append("规则:").append("\t").append(predicateJ);
-        }
-
-        sb.append("\r\n\t").append("转发:").append("\t").append(route.getUri());
-        List<FilterDefinition> filters = route.getFilters();
-        StringJoiner filterJ = new StringJoiner(";\t");
-        if (CollectionUtils.isNotEmpty(filters)) {
-            for (FilterDefinition filter : filters) {
-                String name = filter.getName();
-                Map<String, String> args = filter.getArgs();
-                if (MapUtils.isEmpty(args)) {
-                    filterJ.add(name);
-                } else {
-                    filterJ.add(name + ":" + JsonUtil.instance.toStr(args));
-                }
-            }
-            sb.append("\r\n\t").append("拦截:").append("\t").append(filterJ);
-        }
-
-        routeLog.add(sb);
-    }*/
 
     private RouteDefinition route404() {
         RouteDefinition definition = new RouteDefinition();
@@ -188,7 +146,8 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         RouteDefinition definition = new RouteDefinition();
         String name = routeNode.getName();
         String prefix = routeNode.getPrefix().name();
-        String path = "/api/" + prefix + "/" + routeNode.getPath() + "/**";
+        String path = "/api/" + prefix + "/" + routeNode.getPath();
+        String pathPattern = path + "/**";
         boolean enableAuth = routeNode.enableAuth();
         String service = routeNode.getService();
         String remark = routeNode.getRemark();
@@ -196,7 +155,7 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
 
         StringBuilder sb = new StringBuilder();
         sb.append("\r\n\t").append("路由:").append("\t").append(name);
-        sb.append("\r\n\t").append("规则:").append("\t").append(path);
+        sb.append("\r\n\t").append("规则:").append("\t").append(pathPattern);
         sb.append("\r\n\t").append("转发:").append("\t").append(uri);
         sb.append("\r\n\t").append("备注:").append("\t").append(remark);
 
@@ -206,7 +165,7 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         // 设置Predicate
         PredicateDefinition predicate = new PredicateDefinition();
         predicate.setName("Path");
-        predicate.addArg("pattern", path);
+        predicate.addArg("pattern", pathPattern);
         definition.setPredicates(Collections.singletonList(predicate));
 
 
@@ -232,10 +191,17 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         rewritePathFilter.addArg("regexp", "/" + routeNode.getPath() + "(?<segment>.*)");
         rewritePathFilter.addArg("replacement", "${segment}");
         filters.add(rewritePathFilter);
-        filterJ.add("RewritePath=" + path + "-> /" + routeNode.getPath() + "/**");
+        filterJ.add("RewritePath=" + pathPattern + "-> /" + routeNode.getPath() + "/**");
 
         // 添加全局过滤器（通过配置方式）
         if (enableAuth) {
+            FilterDefinition documentFilter = new FilterDefinition();
+            documentFilter.setName("DocumentFilter");
+            documentFilter.addArg("context", path);
+            documentFilter.addArg("docPath", "/static/doc/");
+            filters.add(documentFilter);
+            filterJ.add("DocumentFilter[文档过滤器]");
+
             FilterDefinition authFilter = new FilterDefinition();
             authFilter.setName("AuthFilter");
             filters.add(authFilter);

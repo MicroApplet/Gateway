@@ -48,7 +48,8 @@ public class AuthServerProperty implements Serializable {
     public String authUrl(String token) {
         String path = (StringUtils.startsWith(authPath, "/") ? StringUtils.EMPTY : "/") + authPath;
         String format = String.format("lb://%s%s?token=%s", auth, path, token);
-        log.info("登录认证地址：{}", format);
+        if (log.isDebugEnabled())
+            log.debug("登录认证地址：{}", format);
         return format;
     }
 }
