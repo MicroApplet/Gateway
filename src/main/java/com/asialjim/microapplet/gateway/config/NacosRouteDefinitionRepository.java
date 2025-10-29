@@ -17,20 +17,16 @@
 package com.asialjim.microapplet.gateway.config;
 
 import com.alibaba.druid.util.StringUtils;
-import com.asialjim.microapplet.common.utils.JsonUtil;
 import com.asialjim.microapplet.gateway.route.RouteConfigProperty;
 import com.asialjim.microapplet.gateway.route.RouteNode;
 import jakarta.annotation.Resource;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.MapUtils;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.filter.FilterDefinition;
 import org.springframework.cloud.gateway.handler.predicate.PredicateDefinition;
-import org.springframework.cloud.gateway.route.Route;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionRepository;
 import org.springframework.context.*;
@@ -39,7 +35,6 @@ import org.springframework.context.event.EventListener;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import javax.print.Doc;
 import java.net.URI;
 import java.util.*;
 
