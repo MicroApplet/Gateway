@@ -41,7 +41,6 @@ import java.util.UUID;
  * @since 2025/5/6, &nbsp;&nbsp; <em>version:1.0</em>
  */
 @Slf4j
-//@Component
 public class GlobalTraceFilter implements GatewayFilter, Ordered {
     private static final String REQUEST_TIME = "_request_time_";
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");

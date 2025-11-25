@@ -19,11 +19,8 @@ package com.asialjim.microapplet.gateway.config;
 import com.alibaba.druid.util.StringUtils;
 import com.asialjim.microapplet.gateway.route.RouteConfigProperty;
 import com.asialjim.microapplet.gateway.route.RouteNode;
-import jakarta.annotation.Resource;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.filter.FilterDefinition;
 import org.springframework.cloud.gateway.handler.predicate.PredicateDefinition;
@@ -31,12 +28,12 @@ import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionRepository;
 import org.springframework.context.*;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.EventListener;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 基于 nacos 的动态路由策略仓库
@@ -46,29 +43,19 @@ import java.util.*;
  * @since 2025/9/25, &nbsp;&nbsp; <em>version:1.0</em>
  */
 @Slf4j
-@RefreshScope
 @Configuration
 public class NacosRouteDefinitionRepository implements RouteDefinitionRepository, ApplicationEventPublisherAware {
-    private final List<RouteDefinition> routes = new Vector<>();
-    @Resource
-    private RouteConfigProperty routeConfigProperty;
+    private final List<RouteDefinition> routes = new CopyOnWriteArrayList<>();
+
     @Setter
     private ApplicationEventPublisher applicationEventPublisher;
 
-    private boolean initialized = false;
-
-    @EventListener(ApplicationReadyEvent.class)
-    public void onApplicationEvent() {
-        if (initialized)
-            return;
-        log.info("应用准备就绪，开始初始化路由配置...");
-        refreshRoutes(this.routeConfigProperty);
-        initialized = true;
-    }
 
     @Override
     public Mono<Void> save(Mono<RouteDefinition> route) {
-        return route.doOnNext(routes::add).doOnNext(item -> log.info("添加路由：{}", item.getId())).then();
+        return route.doOnNext(routes::add)
+                .doOnNext(item -> log.info("添加路由：{}", item))
+                .then();
     }
 
     @Override
@@ -83,31 +70,59 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
         return Flux.fromIterable(routes).doOnSubscribe(subscription -> log.debug("获取路由定义列表"));
     }
 
+
     /**
      * 刷新路由配置
      */
     public void refreshRoutes(RouteConfigProperty routeConfigProperty) {
         log.info("开始刷新路由配置...");
 
-        // 清空现有路由
-        this.routes.clear();
-        final StringJoiner routeJ = new StringJoiner("\r\n\t————————————");
-        List<RouteNode> routes = routeConfigProperty.getRoutes();
-
-        for (RouteNode route : routes) {
-            RouteDefinition definition = convertToRouteDefinition(routeJ, route);
-            this.routes.add(definition);
+        if (Objects.isNull(routeConfigProperty)) {
+            log.warn("路由配置为空，跳过路由刷新");
+            return;
         }
-        this.routes.add(route404());
 
-        log.info("加载路由表{}", routeJ);
+        try {
+            // 1. 使用同步方式清空现有路由
+            log.info("清空现有路由...");
+            List<String> routeIdsToDelete = new ArrayList<>();
+            // 先收集所有路由ID
+            routes.forEach(route -> routeIdsToDelete.add(route.getId()));
+            // 然后批量删除
+            for (String routeId : routeIdsToDelete) {
+                delete(Mono.just(routeId)).block(); // 使用block()确保同步删除
+            }
+            log.info("已清空 {} 条路由", routeIdsToDelete.size());
 
-        // 发布路由刷新事件
-        Optional.ofNullable(this.applicationEventPublisher)
-                .ifPresent(publisher -> {
-                    publisher.publishEvent(new RefreshRoutesEvent(this));
-                    log.info("路由刷新完成，当前路由数量: {}", this.routes.size());
-                });
+            // 2. 同步添加新路由
+            final StringJoiner routeJ = new StringJoiner("\r\n\t————————————");
+            List<RouteNode> newRoutes = routeConfigProperty.getRoutes();
+            log.info("开始加载新路由，共 {} 条", newRoutes.size());
+
+            for (RouteNode route : newRoutes) {
+                RouteDefinition definition = convertToRouteDefinition(routeJ, route);
+                save(Mono.just(definition)).block(); // 使用block()确保同步添加
+            }
+
+            // 添加404路由
+            RouteDefinition route404 = route404();
+            save(Mono.just(route404)).block();
+
+            log.info("加载路由表完成:\n{}", routeJ);
+
+            // 3. 确保applicationEventPublisher不为空
+            if (applicationEventPublisher == null) {
+                log.error("ApplicationEventPublisher未注入，无法发布路由刷新事件");
+                return;
+            }
+
+            // 4. 发布刷新事件
+            log.info("发布路由刷新事件...");
+            applicationEventPublisher.publishEvent(new RefreshRoutesEvent(this));
+            log.info("路由刷新完成，当前路由数量: {}", this.routes.size());
+        } catch (Exception e) {
+            log.error("路由刷新过程中发生错误: {}", e.getMessage(), e);
+        }
     }
 
     private RouteDefinition route404() {

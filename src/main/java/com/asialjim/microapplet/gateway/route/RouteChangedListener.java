@@ -19,7 +19,6 @@ package com.asialjim.microapplet.gateway.route;
 import com.alibaba.cloud.nacos.NacosConfigManager;
 import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.config.listener.Listener;
-import com.alibaba.nacos.api.exception.NacosException;
 import com.asialjim.microapplet.common.utils.JacksonUtil;
 import com.asialjim.microapplet.gateway.config.NacosRouteDefinitionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -65,18 +64,54 @@ public class RouteChangedListener implements Listener {
                 .flatMap(Collection::stream)
                 .filter(Objects::nonNull)
                 .findAny()
-                .orElseGet(Executors::newSingleThreadExecutor);
+                .orElseGet(() -> {
+                    // 返回自定义线程池，避免使用默认线程池可能导致的问题
+                    return Executors.newSingleThreadExecutor(r -> {
+                        Thread thread = new Thread(r, "route-refresh-executor");
+                        thread.setDaemon(true);
+                        return thread;
+                    });
+                });
         this.nacosConfigManager = nacosConfigManager;
         this.nacosRouteDefinitionRepository = nacosRouteDefinitionRepository;
     }
 
     @PostConstruct
     public void init() {
-        ConfigService configService = this.nacosConfigManager.getConfigService();
         try {
+            // 检查必要依赖
+            if (nacosConfigManager == null) {
+                log.error("NacosConfigManager未注入，无法初始化配置监听");
+                return;
+            }
+            
+            if (nacosRouteDefinitionRepository == null) {
+                log.error("NacosRouteDefinitionRepository未注入，无法刷新路由");
+                return;
+            }
+
+            ConfigService configService = nacosConfigManager.getConfigService();
+            if (configService == null) {
+                log.error("无法获取ConfigService，初始化失败");
+                return;
+            }
+            
+            log.info("开始初始化Nacos配置监听，dataId={}, group={}", dataId, group);
+            
+            // 1. 首次加载配置
+            String configContent = configService.getConfig(dataId, group, 5000);
+            if (configContent != null && !configContent.isEmpty()) {
+                log.info("首次加载配置成功，开始初始化路由...");
+                receiveConfigInfo(configContent);
+            } else {
+                log.warn("首次加载配置失败或配置为空");
+            }
+            
+            // 2. 添加配置监听
             configService.addListener(dataId, group, this);
-        } catch (NacosException e) {
-            log.error("添加路由配置变更监听器异常：{}", e.getMessage(), e);
+            log.info("Nacos配置监听初始化完成，已注册监听器");
+        } catch (Exception e) {
+            log.error("初始化Nacos配置监听失败: {}", e.getMessage(), e);
         }
     }
 
@@ -87,10 +122,38 @@ public class RouteChangedListener implements Listener {
 
     @Override
     public void receiveConfigInfo(String configInfo) {
-        GatewayRouteWrapper bean = yamlUtil.toBean(configInfo, GatewayRouteWrapper.class);
-        Optional.ofNullable(bean)
-                .map(GatewayRouteWrapper::getGateway)
-                .ifPresent(nacosRouteDefinitionRepository::refreshRoutes);
+        try {
+            log.info("收到路由配置更新");
+            
+            if (configInfo == null || configInfo.isEmpty()) {
+                log.warn("配置内容为空，跳过处理");
+                return;
+            }
+            
+            GatewayRouteWrapper bean = yamlUtil.toBean(configInfo, GatewayRouteWrapper.class);
+            if (bean != null && bean.getGateway() != null && bean.getGateway().getRoutes() != null && !bean.getGateway().getRoutes().isEmpty()) {
+                nacosRouteDefinitionRepository.refreshRoutes(bean.getGateway());
+                log.info("路由配置更新成功，共加载{}条路由", bean.getGateway().getRoutes().size());
+            } else {
+                log.warn("收到的路由配置为空或格式无效");
+            }
+        } catch (Exception e) {
+            log.error("处理路由配置更新失败: {}", e.getMessage(), e);
+            // 添加重试逻辑
+            try {
+                Thread.sleep(5000);
+                ConfigService configService = nacosConfigManager.getConfigService();
+                if (configService != null) {
+                    String configContent = configService.getConfig(dataId, group, 5000);
+                    if (configContent != null && !configContent.isEmpty()) {
+                        log.info("尝试重新加载配置...");
+                        receiveConfigInfo(configContent);
+                    }
+                }
+            } catch (Exception retryEx) {
+                log.error("重试加载配置失败: {}", retryEx.getMessage(), retryEx);
+            }
+        }
     }
 
     @Data

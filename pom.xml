@@ -190,6 +190,11 @@
             <artifactId>commons-web-nacos</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- 显式添加Nacos Config依赖，确保配置监听正常工作 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
 
 
         <dependency>
