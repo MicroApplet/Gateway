@@ -23,7 +23,12 @@ import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.codec.HttpMessageReader;
+import org.springframework.http.codec.HttpMessageWriter;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
+
+import java.util.List;
 
 /**
  * 网关过滤器配置

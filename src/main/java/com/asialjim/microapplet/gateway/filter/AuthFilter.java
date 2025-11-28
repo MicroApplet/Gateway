@@ -34,9 +34,10 @@ import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.http.HttpCookie;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
+import org.springframework.http.*;
+import org.springframework.http.codec.ClientCodecConfigurer;
+import org.springframework.http.codec.DecoderHttpMessageReader;
+import org.springframework.http.codec.HttpMessageReader;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -48,6 +49,8 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 用户认证过滤器
@@ -94,6 +97,7 @@ public class AuthFilter implements GatewayFilter, Ordered {
                     return chain.filter(exchange.mutate().request(targetRequest).response(response).build());
                 })
                 .onErrorResume(e -> {
+                    log.warn("认证服务不可用：{}",e.getMessage(),e);
                     if (e instanceof RsEx rsEx)
                         return unauthorizedResponse(exchange, rsEx);
                     return unauthorizedResponse(exchange, Res.UserAuthFailure401, "认证服务不可用");
@@ -121,15 +125,16 @@ public class AuthFilter implements GatewayFilter, Ordered {
     }
 
     private Mono<MamsSession> session(String token) {
-        return webClientBuilder
-                .build()
-                .get()
+        return webClientBuilder.build().get()
                 .uri(this.authServerProperty.authUrl(token))
                 .header(Headers.CLIENT_TYPE, Headers.CLOUD_CLIENT)
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, AuthServiceLoadBalancerConfig.rsExFunction())
-                .bodyToMono(MamsSession.class);
+                .toEntity(String.class)
+                .mapNotNull(HttpEntity::getBody)
+                .mapNotNull(s -> JsonUtil.instance.toBean(s, MamsSession.class));
     }
+
 
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, ResCode resCode, String... errs) {
         ServerHttpResponse response = exchange.getResponse();
