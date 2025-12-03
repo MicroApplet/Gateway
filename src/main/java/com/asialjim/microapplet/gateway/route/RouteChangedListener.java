@@ -24,8 +24,10 @@ import com.asialjim.microapplet.gateway.config.NacosRouteDefinitionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
@@ -45,13 +47,14 @@ import java.util.concurrent.Executors;
  */
 @Slf4j
 @Configuration
-public class RouteChangedListener implements Listener {
+public class RouteChangedListener implements Listener, DisposableBean {
     private static final JacksonUtil yamlUtil = JacksonUtil.instance(new ObjectMapper(new YAMLFactory()));
     private static final String dataId = "route.yaml";
 
     private final NacosRouteDefinitionRepository nacosRouteDefinitionRepository;
     private final NacosConfigManager nacosConfigManager;
     private final Executor executor;
+    private boolean isCustomExecutor = false; // 标记是否使用了自定义的线程池
 
     @Value("${spring.cloud.nacos.discovery.group}")
     private String group;
@@ -66,6 +69,7 @@ public class RouteChangedListener implements Listener {
                 .findAny()
                 .orElseGet(() -> {
                     // 返回自定义线程池，避免使用默认线程池可能导致的问题
+                    isCustomExecutor = true;
                     return Executors.newSingleThreadExecutor(r -> {
                         Thread thread = new Thread(r, "route-refresh-executor");
                         thread.setDaemon(true);
@@ -159,5 +163,32 @@ public class RouteChangedListener implements Listener {
     @Data
     private static class GatewayRouteWrapper {
         private RouteConfigProperty gateway;
+    }
+    
+    @Override
+    @PreDestroy
+    public void destroy() {
+        try {
+            // 1. 移除Nacos配置监听器
+            if (nacosConfigManager != null) {
+                ConfigService configService = nacosConfigManager.getConfigService();
+                if (configService != null) {
+                    configService.removeListener(dataId, group, this);
+                    log.info("已移除Nacos配置监听器，dataId={}, group={}", dataId, group);
+                }
+            }
+            
+            // 2. 关闭自定义创建的线程池
+            if (isCustomExecutor && executor instanceof java.util.concurrent.ExecutorService) {
+                try {
+                    ((java.util.concurrent.ExecutorService) executor).shutdown();
+                    log.info("已关闭自定义路由刷新线程池");
+                } catch (Exception e) {
+                    log.error("关闭线程池失败: {}", e.getMessage(), e);
+                }
+            }
+        } catch (Exception e) {
+            log.error("销毁RouteChangedListener时发生异常: {}", e.getMessage(), e);
+        }
     }
 }

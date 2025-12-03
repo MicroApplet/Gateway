@@ -21,12 +21,14 @@ import com.asialjim.microapplet.gateway.route.RouteConfigProperty;
 import com.asialjim.microapplet.gateway.route.RouteNode;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.filter.FilterDefinition;
 import org.springframework.cloud.gateway.handler.predicate.PredicateDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionRepository;
-import org.springframework.context.*;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ApplicationEventPublisherAware;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -44,7 +46,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 @Slf4j
 @Configuration
-public class NacosRouteDefinitionRepository implements RouteDefinitionRepository, ApplicationEventPublisherAware {
+public class NacosRouteDefinitionRepository implements RouteDefinitionRepository, ApplicationEventPublisherAware, DisposableBean {
     private final List<RouteDefinition> routes = new CopyOnWriteArrayList<>();
 
     @Setter
@@ -57,12 +59,40 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
                 .doOnNext(item -> log.info("添加路由：{}", item))
                 .then();
     }
+    
+    /**
+     * 应用关闭时清理资源，防止内存泄漏
+     */
+    @Override
+    public void destroy() throws Exception {
+        log.info("NacosRouteDefinitionRepository正在销毁，清理路由缓存和相关资源...");
+        clearRoutes();
+        // 清除对applicationEventPublisher的引用，避免内存泄漏
+        this.applicationEventPublisher = null;
+        log.info("NacosRouteDefinitionRepository资源清理完成");
+    }
 
     @Override
     public Mono<Void> delete(Mono<String> routeId) {
         return routeId.doOnNext(id -> routes.removeIf(item -> StringUtils.equals(id, item.getId())))
                 .doOnNext(id -> log.info("删除路由：{}", id))
                 .then();
+    }
+    
+    /**
+     * 清空所有路由，用于应用关闭时清理资源
+     */
+    private void clearRoutes() {
+            // 1. 使用同步方式清空现有路由
+            log.info("清空现有路由...");
+            List<String> routeIdsToDelete = new ArrayList<>();
+            // 先收集所有路由ID
+            routes.forEach(route -> routeIdsToDelete.add(route.getId()));
+            // 然后批量删除
+            for (String routeId : routeIdsToDelete) {
+                delete(Mono.just(routeId)).block(); // 使用block()确保同步删除
+            }
+            log.info("已清空 {} 条路由", routeIdsToDelete.size());
     }
 
     @Override
@@ -84,15 +114,7 @@ public class NacosRouteDefinitionRepository implements RouteDefinitionRepository
 
         try {
             // 1. 使用同步方式清空现有路由
-            log.info("清空现有路由...");
-            List<String> routeIdsToDelete = new ArrayList<>();
-            // 先收集所有路由ID
-            routes.forEach(route -> routeIdsToDelete.add(route.getId()));
-            // 然后批量删除
-            for (String routeId : routeIdsToDelete) {
-                delete(Mono.just(routeId)).block(); // 使用block()确保同步删除
-            }
-            log.info("已清空 {} 条路由", routeIdsToDelete.size());
+            clearRoutes();
 
             // 2. 同步添加新路由
             final StringJoiner routeJ = new StringJoiner("\r\n\t————————————");

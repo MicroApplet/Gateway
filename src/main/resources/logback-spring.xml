@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~    Copyright 2014-2025 <a href="mailto:asialjim@qq.com">Asial Jim</a>
+  ~
+  ~    Licensed under the Apache License, Version 2.0 (the "License");
+  ~    you may not use this file except in compliance with the License.
+  ~    You may obtain a copy of the License at
+  ~
+  ~        http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~    Unless required by applicable law or agreed to in writing, software
+  ~    distributed under the License is distributed on an "AS IS" BASIS,
+  ~    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~    See the License for the specific language governing permissions and
+  ~    limitations under the License.
+  -->
+
+<configuration>
+    <!-- 引入Spring Boot默认的logback配置 -->
+    <!-- 引入 Spring 的属性 -->
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" />
+
+    <!-- 控制台输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <timestamp key="start" datePattern="yyyy-MM-dd HH:mm:ss.SSS" timeZone="Asia/Shanghai"/>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS, Asia/Shanghai} %X{x-session-id}:%X{x-trace-id} [%-5level] %logger{36} - %msg%n</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 文件输出 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <encoder>
+            <timestamp key="start" datePattern="yyyy-MM-dd HH:mm:ss.SSS" timeZone="Asia/Shanghai"/>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS, Asia/Shanghai} %X{x-session-id}:%X{x-trace-id} [%-5level] %logger{36} - %msg%n</pattern>
+            <charset>utf8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 3.2 正式文件名，带应用名 -->
+            <fileNamePattern>./logs/${APP_NAME}/log-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>10GB</totalSizeCap>
+            <!-- 关键点：Spring 启动完成后主动滚动一次 -->
+            <rolloverOnStartup>true</rolloverOnStartup>
+        </rollingPolicy>
+    </appender>
+
+    <!-- 日志级别设置 -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+
+    <!-- Spring框架日志级别 -->
+    <logger name="org.springframework" level="INFO"/>
+    <logger name="org.hibernate" level="INFO"/>
+</configuration>

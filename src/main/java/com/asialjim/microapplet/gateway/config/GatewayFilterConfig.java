@@ -16,19 +16,15 @@
 
 package com.asialjim.microapplet.gateway.config;
 
-import com.asialjim.microapplet.gateway.filter.Global404Filter;
+import com.asialjim.microapplet.gateway.auth.AuthService;
 import com.asialjim.microapplet.gateway.filter.AuthFilter;
-import com.asialjim.microapplet.gateway.filter.GlobalTraceFilter;
+import com.asialjim.microapplet.gateway.filter.Global404Filter;
+import com.asialjim.microapplet.gateway.filter.LoggingFilter;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.codec.HttpMessageReader;
-import org.springframework.http.codec.HttpMessageWriter;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
-
-import java.util.List;
 
 /**
  * 网关过滤器配置
@@ -39,6 +35,7 @@ import java.util.List;
  */
 @Configuration
 public class GatewayFilterConfig {
+
     @Bean
     @LoadBalanced
     public WebClient.Builder loadBalancedWebClientBuilder() {
@@ -46,15 +43,13 @@ public class GatewayFilterConfig {
     }
 
     @Bean
-    public GatewayFilter authFilter(AuthServerProperty authServerProperty,
-                                    WebClient.Builder loadBalancedWebClientBuilder) {
-
-        return new AuthFilter(authServerProperty, loadBalancedWebClientBuilder);
+    public GatewayFilter authFilter(AuthService authService){
+        return new AuthFilter(authService);
     }
 
     @Bean
     public GatewayFilter globalTraceFilter() {
-        return new GlobalTraceFilter();
+        return new LoggingFilter();
     }
 
     @Bean
