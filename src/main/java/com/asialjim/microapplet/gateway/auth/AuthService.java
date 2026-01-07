@@ -32,6 +32,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Objects;
@@ -72,9 +74,19 @@ public class AuthService {
                         if (Objects.nonNull(session)) {
                             if (session.isExpired())
                                 Res.UserAuthFailure401Thr.thr(Collections.singletonList("非法令牌"));
-                            // 发布用户会话事件
-                            return reactiveRedisTemplate.convertAndSend(Headers.CURRENT_SESSION, token)
-                                    .doOnSuccess(session1 -> log.info("会话:{} 访问事件发布", token))
+
+
+                            return reactiveRedisTemplate.execute(
+                                            connection -> connection.pubSubCommands()
+                                                    .publish(
+                                                            ByteBuffer.wrap(Headers.CURRENT_SESSION.getBytes(StandardCharsets.UTF_8)),
+                                                            ByteBuffer.wrap(token.getBytes(StandardCharsets.UTF_8))
+                                                    ).flatMap((Function<Long, Mono<Long>>) aLong -> {
+                                                        log.info("Redis通道发布用户会话保持事件客户端数：{}", aLong);
+                                                        return Mono.just(aLong);
+                                                    })
+                                    )
+                                    .then()
                                     .thenReturn(session);
                         }
                         System.err.println("缓存未空令牌");
