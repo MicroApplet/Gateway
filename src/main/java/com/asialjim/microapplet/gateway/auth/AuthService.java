@@ -31,6 +31,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -70,27 +71,19 @@ public class AuthService {
             return reactiveRedisTemplate.opsForValue()
                     .get(key)
                     .map(o -> Objects.nonNull(o) && o instanceof MamsSession mamsSession ? mamsSession : null)
-                    .flatMap((Function<MamsSession, Mono<MamsSession>>) session -> {
-                        if (Objects.nonNull(session)) {
-                            if (session.isExpired())
-                                Res.UserAuthFailure401Thr.thr(Collections.singletonList("非法令牌"));
-
-
-                            return reactiveRedisTemplate.execute(
-                                            connection -> connection.pubSubCommands()
-                                                    .publish(
-                                                            ByteBuffer.wrap(Headers.CURRENT_SESSION.getBytes(StandardCharsets.UTF_8)),
-                                                            ByteBuffer.wrap(token.getBytes(StandardCharsets.UTF_8))
-                                                    ).flatMap((Function<Long, Mono<Long>>) aLong -> {
-                                                        log.info("Redis通道发布用户会话保持事件客户端数：{}", aLong);
-                                                        return Mono.just(aLong);
-                                                    })
-                                    )
-                                    .then()
-                                    .thenReturn(session);
-                        }
-                        System.err.println("缓存未空令牌");
-                        return Mono.empty();
+                    .filter(Objects::nonNull)
+                    .doOnNext(session -> {
+                        //noinspection ReactiveStreamsUnusedPublisher
+                        reactiveRedisTemplate.execute(
+                                connection -> connection.pubSubCommands()
+                                        .publish(
+                                                ByteBuffer.wrap(Headers.CURRENT_SESSION.getBytes(StandardCharsets.UTF_8)),
+                                                ByteBuffer.wrap(token.getBytes(StandardCharsets.UTF_8))
+                                        ).flatMap((Function<Long, Mono<Long>>) aLong -> {
+                                            log.info("Redis通道发布用户会话保持事件客户端数：{}", aLong);
+                                            return Mono.just(aLong);
+                                        })
+                        ).subscribeOn(Schedulers.boundedElastic());
                     })
                     .switchIfEmpty(
                             webClientBuilder.build().get()
