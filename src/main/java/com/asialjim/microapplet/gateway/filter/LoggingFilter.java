@@ -79,7 +79,7 @@ public class LoggingFilter implements GatewayFilter, Ordered {
                 .doFinally(signalType -> {
                     try {
                         MDC.put(Headers.TRACE_ID, traceId);
-                        log.info(logJoiner.toString());
+                        log.info(logJoiner.add(StringUtils.EMPTY).toString());
                     } finally {
                         MDC.clear();
                     }

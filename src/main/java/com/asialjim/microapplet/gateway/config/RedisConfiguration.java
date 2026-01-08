@@ -16,6 +16,7 @@
 
 package com.asialjim.microapplet.gateway.config;
 
+import com.asialjim.microapplet.common.cons.Headers;
 import com.asialjim.microapplet.common.utils.JacksonUtil;
 import com.asialjim.microapplet.common.utils.JsonUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.ReactiveRedisMessageListenerContainer;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -43,6 +46,18 @@ public class RedisConfiguration {
         GenericJackson2JsonRedisSerializer json = new GenericJackson2JsonRedisSerializer();
         json.configure(JsonUtil::init);
         return json;
+    }
+
+    @Bean
+    public ReactiveRedisMessageListenerContainer redisMessageListenerContainer(ReactiveRedisConnectionFactory connectionFactory){
+        ReactiveRedisMessageListenerContainer container = new ReactiveRedisMessageListenerContainer(connectionFactory);
+        container.receive(new ChannelTopic(Headers.CURRENT_SESSION))
+                .subscribe(message -> {
+                    String channel = message.getChannel();
+                    String message1 = message.getMessage();
+                    System.err.println(">>>>>>" + channel + ":" + message1);
+                }).dispose();
+        return container;
     }
 
     @Bean

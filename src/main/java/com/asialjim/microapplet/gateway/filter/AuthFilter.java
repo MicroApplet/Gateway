@@ -129,10 +129,10 @@ public class AuthFilter implements GatewayFilter, Ordered {
                 .doOnNext(session -> stopWatch.stop())
                 .doFinally(signalType -> {
                     long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
-                    System.err.println("用户令牌认证耗时：" + time + " 毫秒");
+                    if (log.isDebugEnabled())
+                        log.debug("用户令牌认证耗时:{} ms", time);
                 });
     }
-
 
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, ResCode resCode, String... errs) {
         ServerHttpResponse response = exchange.getResponse();

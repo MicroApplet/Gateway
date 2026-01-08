@@ -26,19 +26,18 @@ import com.asialjim.microapplet.gateway.config.AuthServerProperty;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Objects;
-import java.util.function.Function;
 
 /**
  * 认证服务
@@ -49,55 +48,52 @@ import java.util.function.Function;
  */
 @Slf4j
 @Service
-public class AuthService {
+public class AuthService  {
     @Resource
     private ReactiveRedisTemplate<String, Object> reactiveRedisTemplate;
+    @Resource
+    private ReactiveStringRedisTemplate reactiveStringRedisTemplate;
     @Resource
     private WebClient.Builder webClientBuilder;
     @Resource
     private AuthServerProperty authServerProperty;
 
     public Mono<MamsSession> validateToken(String token, String traceid) {
-
-        return Mono.defer(() -> {
-            // 验证令牌
-            if (!MamsTokenUtil.verify(token)) {
-                return Mono.error(Res.UserAuthFailure401Thr.ex(Collections.singletonList("非法令牌")));
-            }
-
-            String key = SessionCacheName.Name.userSessionByToken + "::" + token;
-            // 查询会话信息（假设是反应式的 Redis 客户端）
-            //noinspection ReactiveStreamsNullableInLambdaInTransform
-            return reactiveRedisTemplate.opsForValue()
-                    .get(key)
-                    .map(o -> Objects.nonNull(o) && o instanceof MamsSession mamsSession ? mamsSession : null)
-                    .filter(Objects::nonNull)
-                    .doOnNext(session -> {
-                        //noinspection ReactiveStreamsUnusedPublisher
-                        reactiveRedisTemplate.execute(
-                                connection -> connection.pubSubCommands()
-                                        .publish(
-                                                ByteBuffer.wrap(Headers.CURRENT_SESSION.getBytes(StandardCharsets.UTF_8)),
-                                                ByteBuffer.wrap(token.getBytes(StandardCharsets.UTF_8))
-                                        ).flatMap((Function<Long, Mono<Long>>) aLong -> {
-                                            log.info("Redis通道发布用户会话保持事件客户端数：{}", aLong);
-                                            return Mono.just(aLong);
-                                        })
-                        ).subscribeOn(Schedulers.boundedElastic());
-                    })
-                    .switchIfEmpty(
-                            webClientBuilder.build().get()
-                                    .uri(authServerProperty.authUrl(token))
-                                    .header(Headers.CLIENT_TYPE, Headers.CLOUD_CLIENT)
-                                    .header(Headers.SessionId, "Auth")
-                                    .header(Headers.TraceId, traceid)
-                                    .header(Headers.TRACE_ID, traceid)
-                                    .retrieve()
-                                    .onStatus(HttpStatusCode::isError, AuthServiceLoadBalancerConfig.rsExFunction())
-                                    .toEntity(String.class)
-                                    .mapNotNull(HttpEntity::getBody)
-                                    .mapNotNull(s -> JsonUtil.instance.toBean(s, MamsSession.class))
-                    );
-        }).cache(Duration.ofSeconds(5));
+        String key = SessionCacheName.Name.userSessionByToken + "::" + token;
+        return Mono.just(token)
+                .map(MamsTokenUtil::verify)
+                .flatMap(item -> {
+                    if (!Boolean.TRUE.equals(item))
+                        return Mono.error(Res.UserAuthFailure401Thr.ex(Collections.singletonList("非法令牌")));
+                    return reactiveRedisTemplate.opsForValue().get(key);
+                })
+                .mapNotNull(o -> o instanceof MamsSession mamsSession ? mamsSession : null)
+                .flatMap(session -> {
+                    if (Objects.isNull(session))
+                        return Mono.empty();
+                    return reactiveStringRedisTemplate.execute(
+                                    connection ->
+                                            connection.pubSubCommands()
+                                                    .publish(
+                                                            ByteBuffer.wrap(Headers.CURRENT_SESSION.getBytes(StandardCharsets.UTF_8)),
+                                                            ByteBuffer.wrap(token.getBytes(StandardCharsets.UTF_8))
+                                                    )
+                            )
+                            .then()
+                            .thenReturn(session);
+                })
+                .switchIfEmpty(webClientBuilder.build().get()
+                        .uri(authServerProperty.authUrl(token))
+                        .header(Headers.CLIENT_TYPE, Headers.CLOUD_CLIENT)
+                        .header(Headers.SessionId, "Auth")
+                        .header(Headers.TraceId, traceid)
+                        .header(Headers.TRACE_ID, traceid)
+                        .retrieve()
+                        .onStatus(HttpStatusCode::isError, AuthServiceLoadBalancerConfig.rsExFunction())
+                        .toEntity(String.class)
+                        .mapNotNull(HttpEntity::getBody)
+                        .mapNotNull(s -> JsonUtil.instance.toBean(s, MamsSession.class))
+                )
+                .cache(Duration.ofSeconds(5));
     }
 }
