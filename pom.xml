@@ -228,7 +228,6 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
-
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -239,7 +238,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <mainClass>com.asialjim.microapplet.gateway.Gateway</mainClass>
-                    <finalName>GatewayApplication</finalName>
+                    <finalName>app</finalName>
                 </configuration>
                 <executions>
                     <execution>
