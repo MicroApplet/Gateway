@@ -16,7 +16,6 @@
 
 package com.asialjim.microapplet.gateway.filter;
 
-import com.asialjim.microapplet.gateway.cloud.AuthServiceLoadBalancerConfig;
 import com.asialjim.microapplet.common.cons.Headers;
 import com.asialjim.microapplet.common.cons.WebCons;
 import com.asialjim.microapplet.common.context.Res;
@@ -25,21 +24,20 @@ import com.asialjim.microapplet.common.context.Result;
 import com.asialjim.microapplet.common.exception.RsEx;
 import com.asialjim.microapplet.common.security.MamsSession;
 import com.asialjim.microapplet.common.utils.JsonUtil;
-import com.asialjim.microapplet.gateway.config.AuthServerProperty;
+import com.asialjim.microapplet.gateway.auth.AuthService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.StopWatch;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -48,6 +46,8 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * 用户认证过滤器
@@ -59,8 +59,7 @@ import java.util.Objects;
 @Slf4j
 @AllArgsConstructor
 public class AuthFilter implements GatewayFilter, Ordered {
-    private AuthServerProperty authServerProperty;
-    private WebClient.Builder webClientBuilder;
+    private AuthService authService;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -77,8 +76,9 @@ public class AuthFilter implements GatewayFilter, Ordered {
         if (StringUtils.isBlank(token))
             return unauthorizedResponse(exchange, Res.UserAuthTokenMissing, "缺少认证令牌");
 
+        String traceid = exchange.getAttribute(Headers.TraceId);
         // 调用认证服务验证令牌
-        return session(token)
+        return session(token, traceid)
                 .timeout(Duration.ofSeconds(5))
                 .flatMap(session -> {
                     // 认证失败
@@ -89,11 +89,13 @@ public class AuthFilter implements GatewayFilter, Ordered {
                     ServerHttpRequest targetRequest = exchange.getRequest()
                             .mutate()
                             .header(Headers.CURRENT_SESSION, JsonUtil.instance.toStr(session))
+                            .header(Headers.SessionId, session.getId())
                             .build();
-                    response.getHeaders().set(Headers.SessionId, session.getId());
+                    response.getHeaders().set("X-Session-Id", session.getId());
                     return chain.filter(exchange.mutate().request(targetRequest).response(response).build());
                 })
                 .onErrorResume(e -> {
+                    log.warn("认证服务不可用：{}", e.getMessage(), e);
                     if (e instanceof RsEx rsEx)
                         return unauthorizedResponse(exchange, rsEx);
                     return unauthorizedResponse(exchange, Res.UserAuthFailure401, "认证服务不可用");
@@ -120,15 +122,16 @@ public class AuthFilter implements GatewayFilter, Ordered {
         return null;
     }
 
-    private Mono<MamsSession> session(String token) {
-        return webClientBuilder
-                .build()
-                .get()
-                .uri(this.authServerProperty.authUrl(token))
-                .header(Headers.CLIENT_TYPE, Headers.CLOUD_CLIENT)
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, AuthServiceLoadBalancerConfig.rsExFunction())
-                .bodyToMono(MamsSession.class);
+    private Mono<MamsSession> session(String token, String traceid) {
+        StopWatch stopWatch = new StopWatch();
+        return Mono.fromRunnable(stopWatch::start)
+                .then(Mono.defer((Supplier<Mono<MamsSession>>) () -> authService.validateToken(token, traceid)))
+                .doOnNext(session -> stopWatch.stop())
+                .doFinally(signalType -> {
+                    long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
+                    if (log.isDebugEnabled())
+                        log.debug("用户令牌认证耗时:{} ms", time);
+                });
     }
 
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, ResCode resCode, String... errs) {

@@ -16,6 +16,7 @@
 
 package com.asialjim.microapplet.gateway.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -23,6 +24,7 @@ import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 import java.time.Duration;
+import java.util.Collections;
 
 /**
  * 处理跨域
@@ -31,13 +33,15 @@ import java.time.Duration;
  * @version 1.0
  * @since 2025/9/24, &nbsp;&nbsp; <em>version:1.0</em>
  */
+@Slf4j
 @Configuration
 public class CorsConfig {
+
     @Bean
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.addAllowedOriginPattern("*");
+        config.setAllowedOriginPatterns(Collections.singletonList("*"));
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
         config.addExposedHeader("*");
@@ -47,5 +51,4 @@ public class CorsConfig {
         source.registerCorsConfiguration("/**", config);
         return new CorsWebFilter(source);
     }
-
 }
