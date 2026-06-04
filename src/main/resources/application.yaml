@@ -1,42 +1,41 @@
-
-knife4j:
-  gateway:
-    enabled: true
-    tags-sorter: order
-    operations-sorter: order
-    strategy: discover
-    discover:
-      enabled: true
-      version: openapi3
-      oas3:
-        url: /v3/api-docs?group=default
-        validator-url:
-        oauth2-redirect-url:
-    basic:
-      enable: on
-      username: gateway
-      password: gateway
-
 server:
-  port: ${gateway_port:80}
+  port: ${port:80}
 
 spring:
   application:
-    name: Gateway
+    name: gateway
+
+  config:
+    import:
+      - nacos:route.yaml
+      - nacos:gateway.yaml
+      - nacos:redis.yaml
+      - nacos:sensitive_enc.yaml
+      - nacos:feign.yaml
+      - nacos:log.yaml
+      - nacos:nacos.yaml
   cloud:
     nacos:
-      discovery:
-        server-addr: ${nacos_server:'http://192.168.101.200:8848'}
-        namespace: ${nacos_namespace:public}
-        username: ${nacos_username:nacos}
-        password: ${nacos_password:nacos}
-        group: ${nacos_group:DEFAULT_GROUP}
-    loadbalancer:
-      retry:
-        backoff:
-          enabled: true
+      config:
+        enabled: true
+        server-addr: ${spring.cloud.nacos.discovery.server-addr}
+        namespace: ${spring.cloud.nacos.discovery.namespace}
+        username: ${spring.cloud.nacos.discovery.username}
+        password: ${spring.cloud.nacos.discovery.password}
+        group: ${spring.cloud.nacos.discovery.group}
+        enable-remote-sync-config: true
+        refresh-enabled: true
     gateway:
+      # 关键：关闭默认的路由发现，只使用显式配置的路由
       discovery:
         locator:
-          enabled: true
+          enabled: false # 确保此项为false:cite[1]
           lower-case-service-id: true
+
+logging:
+  level:
+    com:
+      alibaba:
+        nacos:
+          client:
+            naming: error

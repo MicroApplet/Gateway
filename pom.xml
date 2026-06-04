@@ -78,6 +78,15 @@
     </scm>
 
     <properties>
+        <java.version>21</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <spring-boot.version>3.2.9</spring-boot.version>
+        <spring-cloud.version>2023.0.0</spring-cloud.version>
+        <spring-cloud-alibaba.version>2025.0.0.0-preview</spring-cloud-alibaba.version>
+        <spring-alibaba-ai.version>1.0.0.2</spring-alibaba-ai.version>
+        <spring-ai.version>1.0.1</spring-ai.version>
+        <hutool.version>5.8.39</hutool.version>
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
     </properties>
@@ -109,42 +118,52 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- ////// spring 相关 ////// -->
             <dependency>
-                <groupId>com.asialjim.microapplet</groupId>
-                <artifactId>commons-triple-dependencies</artifactId>
-                <version>${com.asialjim.microapplet}</version>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>com.asialjim.microapplet</groupId>
-                <artifactId>commons-zen-dependencies</artifactId>
-                <version>${com.asialjim.microapplet}</version>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>com.asialjim.microapplet</groupId>
-                <artifactId>wechat-zen-pom</artifactId>
-                <version>${com.asialjim.microapplet}</version>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- ////// spring 相关 ////// -->
+
+            <!-- ////// alibaba 相关 ////// -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-bom</artifactId>
+                <version>${spring-alibaba-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- ////// alibaba 相关 ////// -->
+
 
         </dependencies>
     </dependencyManagement>
 
     <dependencies>
-        <!--suppress VulnerableLibrariesLocal -->
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
-        </dependency>
-        <!--suppress VulnerableLibrariesLocal -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-        </dependency>
         <!--suppress VulnerableLibrariesLocal -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
@@ -155,19 +174,24 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
+
         <!--suppress VulnerableLibrariesLocal -->
         <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-openfeign</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-gateway-spring-boot-starter</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
         </dependency>
 
         <dependency>
             <groupId>com.asialjim.microapplet</groupId>
             <artifactId>commons-common</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.asialjim.microapplet</groupId>
+            <artifactId>commons-web-nacos</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
 
@@ -188,19 +212,33 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+
 
     </dependencies>
 
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <!--发布到maven 中央仓库-->
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>2.7.18</version>
                 <configuration>
-                    <mainClass>com.asialjim.microapplet.GatewayApplication</mainClass>
+                    <mainClass>com.asialjim.microapplet.gateway.Gateway</mainClass>
                     <finalName>GatewayApplication</finalName>
                 </configuration>
                 <executions>
