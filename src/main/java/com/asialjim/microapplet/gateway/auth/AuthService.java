@@ -58,7 +58,7 @@ public class AuthService  {
     @Resource
     private AuthServerProperty authServerProperty;
 
-    public Mono<MamsSession> validateToken(String token, String traceid) {
+    public Mono<? extends MamsSession> validateToken(String token, String traceid) {
         String key = SessionCacheName.Name.userSessionByToken + "::" + token;
         return Mono.just(token)
                 .map(MamsTokenUtil::verify)

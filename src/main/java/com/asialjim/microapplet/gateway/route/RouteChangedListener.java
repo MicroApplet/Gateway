@@ -21,8 +21,6 @@ import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.config.listener.Listener;
 import com.asialjim.microapplet.common.utils.JacksonUtil;
 import com.asialjim.microapplet.gateway.config.NacosRouteDefinitionRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.Data;
@@ -30,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.dataformat.yaml.YAMLMapper;
 
 import java.util.Collection;
 import java.util.List;
@@ -48,7 +47,7 @@ import java.util.concurrent.Executors;
 @Slf4j
 @Configuration
 public class RouteChangedListener implements Listener, DisposableBean {
-    private static final JacksonUtil yamlUtil = JacksonUtil.instance(new ObjectMapper(new YAMLFactory()));
+    private static final JacksonUtil<YAMLMapper, YAMLMapper.Builder> yamlUtil = JacksonUtil.instance(YAMLMapper.builder());
     private static final String dataId = "route.yaml";
 
     private final NacosRouteDefinitionRepository nacosRouteDefinitionRepository;
@@ -62,6 +61,7 @@ public class RouteChangedListener implements Listener, DisposableBean {
     public RouteChangedListener(List<Executor> executors,
                                 NacosConfigManager nacosConfigManager,
                                 NacosRouteDefinitionRepository nacosRouteDefinitionRepository) {
+        tools.jackson.dataformat.yaml.YAMLFactory build = tools.jackson.dataformat.yaml.YAMLFactory.builder().build();
         this.executor = Optional.ofNullable(executors)
                 .stream()
                 .flatMap(Collection::stream)
