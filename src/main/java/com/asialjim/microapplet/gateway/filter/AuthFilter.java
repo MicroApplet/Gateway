@@ -125,7 +125,10 @@ public class AuthFilter implements GatewayFilter, Ordered {
     private Mono<MamsSession> session(String token, String traceid) {
         StopWatch stopWatch = new StopWatch();
         return Mono.fromRunnable(stopWatch::start)
-                .then(Mono.defer((Supplier<Mono<MamsSession>>) () -> authService.validateToken(token, traceid)))
+                .then(Mono.defer((Supplier<Mono<MamsSession>>) () -> {
+                    //noinspection unchecked
+                    return (Mono<MamsSession>) authService.validateToken(token, traceid);
+                }))
                 .doOnNext(session -> stopWatch.stop())
                 .doFinally(signalType -> {
                     long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
