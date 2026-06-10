@@ -24,5 +24,12 @@ package com.asialjim.microapplet.gateway.route;
  * @since 2025/10/23, &nbsp;&nbsp; <em>version:1.0</em>
  */
 public enum Prefix {
-    rest,open,admin,domain
+    /** REST API 路由 /api/rest/* */
+    rest,
+    /** 开放接口路由 /api/open/* */
+    open,
+    /** 管理后台路由 /api/admin/* */
+    admin,
+    /** AI 对话路由 /api/ai/* */
+    ai
 }
