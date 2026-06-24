@@ -1,163 +1,164 @@
 /*
- *    Copyright 2014-2025 <a href="mailto:asialjim@qq.com">Asial Jim</a>
+ * Copyright 2014-2025 <a href="mailto:asialjim@qq.com">Asial Jim</a>
  *
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.asialjim.microapplet.gateway.filter;
+import com.asialjim.microapplet.web.client.MamsHttpHeaders;
 
-import com.asialjim.microapplet.common.cons.Headers;
-import com.asialjim.microapplet.common.cons.WebCons;
-import com.asialjim.microapplet.common.context.Res;
-import com.asialjim.microapplet.common.context.ResCode;
-import com.asialjim.microapplet.common.context.Result;
-import com.asialjim.microapplet.common.exception.RsEx;
-import com.asialjim.microapplet.common.security.MamsSession;
-import com.asialjim.microapplet.common.utils.JsonUtil;
-import com.asialjim.microapplet.gateway.auth.AuthService;
-import lombok.AllArgsConstructor;
+import com.asialjim.microapplet.session.SessionCtx;
+import com.asialjim.microapplet.session.SessionRepository;
+import com.asialjim.microapplet.gateway.context.AuthenticateResCode;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.time.StopWatch;
+import org.slf4j.MDC;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.core.Ordered;
-import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpCookie;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMessage;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
+import java.util.*;
 
 /**
- * 用户认证过滤器
+ * 网关用户身份认证组件
  *
- * @author <a href="mailto:asialjim@hotmail.com">Asial Jim</a>
+ * @author Asial Jim
  * @version 1.0
- * @since 2025/9/24, &nbsp;&nbsp; <em>version:1.0</em>
+ * @since 2026/2/27, &nbsp;&nbsp; <em>version:1.0</em>
  */
 @Slf4j
-@AllArgsConstructor
-public class AuthFilter implements GatewayFilter, Ordered {
-    private AuthService authService;
+@Component
+public class AuthFilter implements GatewayFilter {
+    public static final String NAME = "AuthFilter";
+
+    public static class Config {
+    }
+
+    private static final String BEARER_PREFIX = "Bearer ";
+    private static final String SESSION_ATTR = "web:attribute:user:session";
+
+    private static final String[] TOKEN = {"authorization", MamsHttpHeaders.Authorization, MamsHttpHeaders.USER_TOKEN_KEY};
+
+    private final SessionCtx authenticator;
+    private final SessionRepository sessionRepository;
+
+    public AuthFilter(SessionCtx authenticator, SessionRepository sessionRepository) {
+        this.authenticator = authenticator;
+        this.sessionRepository = sessionRepository;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        Boolean isDocumentReq = exchange.getAttribute(DocumentFilter.DOCUMENT_REQUEST_URL_ATTR);
-        if (Boolean.TRUE.equals(isDocumentReq))
-            return chain.filter(exchange);
-
         ServerHttpRequest request = exchange.getRequest();
         ServerHttpResponse response = exchange.getResponse();
+        return Mono.deferContextual(ctxView -> {
+            String trace = exchange.getAttribute(MamsHttpHeaders.TRACE_ID);
 
-        // 提取令牌
-        String token = extractToken(request);
+            return Mono.just(request)
+                    .map(this::authorization)
+                    .flatMap(this.authenticator::authMono)
+                    .timeout(Duration.ofSeconds(5))
+                    .switchIfEmpty(Mono.error(AuthenticateResCode.Failure::ex))
+                    .flatMap(session -> {
+                                try {
 
-        if (StringUtils.isBlank(token))
-            return unauthorizedResponse(exchange, Res.UserAuthTokenMissing, "缺少认证令牌");
+                                    if (StringUtils.isNotBlank(trace))
+                                        MDC.put(MamsHttpHeaders.TRACE_ID, trace);
 
-        String traceid = exchange.getAttribute(Headers.TraceId);
-        // 调用认证服务验证令牌
-        return session(token, traceid)
-                .timeout(Duration.ofSeconds(5))
-                .flatMap(session -> {
-                    // 认证失败
-                    if (StringUtils.isBlank(session.getUserid()))
-                        return unauthorizedResponse(exchange, Res.UserAuthFailure401Thr, "认证失败");
+                                    log.info("\r\n用户认证成功：\r\n\t{}\r\nHeaders:\r\n\t{}", session, request.getHeaders());
 
-                    // 认证成功
-                    ServerHttpRequest targetRequest = exchange.getRequest()
-                            .mutate()
-                            .header(Headers.CURRENT_SESSION, JsonUtil.instance.toStr(session))
-                            .header(Headers.SessionId, session.getId())
-                            .build();
-                    response.getHeaders().set("X-Session-Id", session.getId());
-                    return chain.filter(exchange.mutate().request(targetRequest).response(response).build());
-                })
-                .onErrorResume(e -> {
-                    log.warn("认证服务不可用：{}", e.getMessage(), e);
-                    if (e instanceof RsEx rsEx)
-                        return unauthorizedResponse(exchange, rsEx);
-                    return unauthorizedResponse(exchange, Res.UserAuthFailure401, "认证服务不可用");
-                });
+                                    // 没有会话编号，认证失败
+                                    String sessionId = session.getId();
+                                    if (StringUtils.isBlank(sessionId))
+                                        return Mono.error(AuthenticateResCode.Failure.ex(Collections.singletonList("会话编号[sessionId]获取失败")));
+
+                                    // 没有会话信息，认证失败
+                                    //noinspection ConstantValue
+                                    if (Objects.isNull(session))
+                                        return Mono.error(AuthenticateResCode.Failure.ex(Collections.singletonList("用户会话[session]获取失败")));
+
+                                    // 会话信息中没有取到用户编号，认证失败
+                                    String openid = session.getOpenid();
+                                    if (StringUtils.isBlank(openid))
+                                        return Mono.error(AuthenticateResCode.Failure.ex(Collections.singletonList("用户编号[openid]获取失败")));
+                                    String token = session.getToken();
+                                    String traceId = ctxView.get(MamsHttpHeaders.TRACE_ID);
+                                    session.setTrace(traceId);
+                                    return sessionRepository.saveMono(session)
+                                            .flatMap(_ -> {
+                                                // 认证成功
+                                                ServerHttpRequest targetReq = exchange.getRequest()
+                                                        .mutate()
+                                                        .header(MamsHttpHeaders.SESSION_ID, sessionId)
+                                                        .header(MamsHttpHeaders.USER_TOKEN_KEY, session.getToken())
+                                                        .header(MamsHttpHeaders.Authorization, session.getToken())
+                                                        .header(MamsHttpHeaders.OPEN_ID, openid)
+                                                        .build();
+
+                                                ServerWebExchange change = exchange.mutate().request(targetReq).response(response).build();
+                                                change.getAttributes().put(SESSION_ATTR, session);
+                                                change.getAttributes().put(MamsHttpHeaders.SESSION_ID, sessionId);
+                                                return chain.filter(change)
+                                                        .contextWrite(ctx -> ctx.put(MamsHttpHeaders.USER_TOKEN_KEY, token))
+                                                        .contextWrite(ctx -> ctx.put(MamsHttpHeaders.SESSION_ID, sessionId))
+                                                        ;
+                                            });
+                                } finally {
+                                    MDC.clear();
+                                }
+                            }
+                    );
+        });
+
     }
 
-    private String extractToken(ServerHttpRequest request) {
-        // 从Authorization头提取
-        String authHeader = request.getHeaders().getFirst(Headers.AUTHORIZATION);
-        if (StringUtils.isNotBlank(authHeader))
-            return authHeader.replaceFirst(WebCons.BEARER_PREFIX, StringUtils.EMPTY);
 
-        authHeader = request.getHeaders().getFirst(Headers.USER_TOKEN);
-        if (StringUtils.isNotBlank(authHeader))
-            return authHeader.replaceFirst(WebCons.BEARER_PREFIX, StringUtils.EMPTY);
+    private Set<String> authorization(ServerHttpRequest request) {
+        Set<String> tokens = new HashSet<>();
+        Optional.ofNullable(request)
+                .map(HttpMessage::getHeaders)
+                .ifPresent(headers -> authorizationToken(headers, tokens));
 
-        // 从Cookie提取
-        HttpCookie cookie = request.getCookies().getFirst(Headers.USER_TOKEN);
+        Optional.ofNullable(request)
+                .map(ServerHttpRequest::getCookies)
+                .map(Map::values)
+                .stream()
+                .flatMap(Collection::stream)
+                .flatMap(Collection::stream)
+                .filter(cookie -> MamsHttpHeaders.USER_TOKEN_KEY.equalsIgnoreCase(cookie.getName()))
+                .map(HttpCookie::getValue)
+                .filter(StringUtils::isNotBlank)
+                .forEach(tokens::add);
+        if (CollectionUtils.isEmpty(tokens))
+            AuthenticateResCode.TokenMiss.thr(List.of("检查Authorization 或 Cookie:" + MamsHttpHeaders.USER_TOKEN_KEY));
 
-        if (Objects.nonNull(cookie))
-            return cookie.getValue();
-
-
-        return null;
+        return tokens;
     }
 
-    private Mono<MamsSession> session(String token, String traceid) {
-        StopWatch stopWatch = new StopWatch();
-        return Mono.fromRunnable(stopWatch::start)
-                .then(Mono.defer((Supplier<Mono<MamsSession>>) () -> {
-                    //noinspection unchecked
-                    return (Mono<MamsSession>) authService.validateToken(token, traceid);
-                }))
-                .doOnNext(session -> stopWatch.stop())
-                .doFinally(signalType -> {
-                    long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
-                    if (log.isDebugEnabled())
-                        log.debug("用户令牌认证耗时:{} ms", time);
-                });
-    }
-
-    private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, ResCode resCode, String... errs) {
-        ServerHttpResponse response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.UNAUTHORIZED);
-        response.getHeaders().add("Content-Type", "application/json;charset=UTF-8");
-
-        Result<Object> result = resCode.result();
-        if (ArrayUtils.isNotEmpty(errs)) {
-            List<String> errs1 = result.getErrs();
-            errs1.addAll(Arrays.asList(errs));
-            result.setErrs(errs1);
+    private void authorizationToken(HttpHeaders headers, Set<String> tokens) {
+        for (String s : TOKEN) {
+            String value = headers.getFirst(s);
+            if (StringUtils.isNotBlank(value))
+                tokens.add(value.replaceFirst(BEARER_PREFIX, StringUtils.EMPTY));
         }
-
-        String json = JsonUtil.instance.toStr(result);
-
-        byte[] bits = json.getBytes(StandardCharsets.UTF_8);
-        DataBuffer buffer = response.bufferFactory().wrap(bits);
-        return response.writeWith(Mono.just(buffer));
-    }
-
-    @Override
-    public int getOrder() {
-        return -100; // 高优先级
     }
 }
