@@ -53,8 +53,8 @@ public class AnnoFilter implements GatewayFilter {
 
     private final SessionRepository sessionRepository;
 
-    public AnnoFilter(SessionRepository sessionRepository) {
-        this.sessionRepository = sessionRepository;
+    public AnnoFilter(SessionCtx sessionCtx) {
+        this.sessionRepository = sessionCtx.sessionRepository();
     }
 
     @Override

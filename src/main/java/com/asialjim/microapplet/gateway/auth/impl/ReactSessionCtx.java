@@ -40,12 +40,19 @@ import java.util.Set;
 @Component
 public class ReactSessionCtx implements SessionCtx {
     @Resource
-    private SessionRepository sessionRepository;
+    private SessionRepository reactiveRedisSessionRepository;
+
+
+    @Override
+    public SessionRepository sessionRepository() {
+        return reactiveRedisSessionRepository;
+    }
 
     @Override
     public Session currentSession() {
         throw new UnsupportedOperationException("网关服务不支持获取当前请求会话");
     }
+
 
     @Override
     public Session auth(Set<String> tokens) {
@@ -64,6 +71,11 @@ public class ReactSessionCtx implements SessionCtx {
                 .next();
     }
 
+    @Override
+    public void save(Session userSession) {
+        throw new UnsupportedOperationException("网关服务请使用 saveMono 响应式方法");
+    }
+
     /**
      * 验签 → 查库，全响应式
      */
@@ -74,7 +86,7 @@ public class ReactSessionCtx implements SessionCtx {
             return Mono.empty();
         }
 
-        return sessionRepository.findByTokenMono(token)
+        return reactiveRedisSessionRepository.findByTokenMono(token)
                 .doOnNext(session -> log.debug("令牌认证成功: token={}, userid={}", session.getToken(), session.getUserid()));
     }
 

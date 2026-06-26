@@ -61,9 +61,9 @@ public class AuthFilter implements GatewayFilter {
     private final SessionCtx authenticator;
     private final SessionRepository sessionRepository;
 
-    public AuthFilter(SessionCtx authenticator, SessionRepository sessionRepository) {
+    public AuthFilter(SessionCtx authenticator) {
         this.authenticator = authenticator;
-        this.sessionRepository = sessionRepository;
+        this.sessionRepository = authenticator.sessionRepository();
     }
 
     @Override
