@@ -55,6 +55,10 @@ public class RouteDefinitionRepositoryImpl implements MamsRouteDefinitionReposit
             }
         }
 
+        for (RouteDef re : res) {
+            log.info("路由表：{}",re);
+        }
+
         return res;
     }
 

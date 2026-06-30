@@ -56,6 +56,7 @@ public class DynamicRouteDefinitionRepository implements RouteDefinitionReposito
         //noinspection DataFlowIssue,ConstantValue
         return Flux.fromIterable(this.microBankRouteDefinitionRepository.allRoutes())
                 .map(this::trans2Route)
+                .doOnNext(route -> log.info("添加路由配置：{}",route))
                 .filter(Objects::nonNull)
                 .doOnSubscribe(s -> log.debug("获取动态路由表"));
     }
@@ -68,6 +69,9 @@ public class DynamicRouteDefinitionRepository implements RouteDefinitionReposito
             log.error("Service URI is blank for route: {}, skipping", name);
             return null; // Or throw a specific exception depending on requirements
         }
+
+        if (!service.contains("://"))
+            service = "lb://" + service;
         URI uri = URI.create(service);
         String pathPattern = item.pathPattern();
 

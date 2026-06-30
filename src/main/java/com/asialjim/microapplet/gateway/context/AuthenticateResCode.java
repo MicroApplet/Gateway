@@ -44,4 +44,8 @@ public enum AuthenticateResCode implements ResCode {
     private final String msg;
 
 
+    @Override
+    public boolean isSuccess() {
+        return !thr;
+    }
 }

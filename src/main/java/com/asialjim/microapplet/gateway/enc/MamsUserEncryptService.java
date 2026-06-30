@@ -35,7 +35,7 @@ import java.util.Objects;
 public class MamsUserEncryptService {
     private final Map<String, SubAppUserEncryptAdaptor> adaptorMap = new HashMap<>();
     @Resource
-    private MamsUserEncKeyRepository mamsUserEncKeyRepository;
+    private MamsUserEncKeyRepository reactiveRedisMamsUserEncKeyRepository;
 
     @Lazy
     @Resource
@@ -54,14 +54,14 @@ public class MamsUserEncryptService {
 
     public Mono<MamsUserEncKeyResParam> encryptOf(PlatformAppType platformAppType, String appid, String openid, String sessionKey, String version) {
         String subAppTypeCode = platformAppType.uniCode();
-        return this.mamsUserEncKeyRepository.getMono(subAppTypeCode, openid, version)
+        return this.reactiveRedisMamsUserEncKeyRepository.getMono(subAppTypeCode, openid, version)
                 .switchIfEmpty(Mono.defer(() -> {
                     SubAppUserEncryptAdaptor adaptor = adaptorOf(platformAppType);
                     return adaptor.encryptOf(appid, openid, sessionKey, version)
                             .flatMap(key -> {
                                 //noinspection ConstantValue
                                 if (Objects.nonNull(key) && StringUtils.isNotBlank(key.getUserKey()))
-                                    return mamsUserEncKeyRepository.setMono(subAppTypeCode, openid, version, key)
+                                    return reactiveRedisMamsUserEncKeyRepository.setMono(subAppTypeCode, openid, version, key)
                                             .thenReturn(key);
 
                                 return Mono.justOrEmpty(key);
