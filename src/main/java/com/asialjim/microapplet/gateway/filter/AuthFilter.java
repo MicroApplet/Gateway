@@ -103,25 +103,21 @@ public class AuthFilter implements GatewayFilter {
                                     String token = session.getToken();
                                     String traceId = ctxView.get(MamsHttpHeaders.TRACE_ID);
                                     session.setTrace(traceId);
-                                    return sessionRepository.saveMono(session)
-                                            .flatMap(_ -> {
-                                                // 认证成功
-                                                ServerHttpRequest targetReq = exchange.getRequest()
-                                                        .mutate()
-                                                        .header(MamsHttpHeaders.SESSION_ID, sessionId)
-                                                        .header(MamsHttpHeaders.USER_TOKEN_KEY, session.getToken())
-                                                        .header(MamsHttpHeaders.Authorization, session.getToken())
-                                                        .header(MamsHttpHeaders.OPEN_ID, openid)
-                                                        .build();
+                                    ServerHttpRequest targetReq = exchange.getRequest()
+                                            .mutate()
+                                            .header(MamsHttpHeaders.SESSION_ID, sessionId)
+                                            .header(MamsHttpHeaders.USER_TOKEN_KEY, session.getToken())
+                                            .header(MamsHttpHeaders.Authorization, session.getToken())
+                                            .header(MamsHttpHeaders.OPEN_ID, openid)
+                                            .build();
 
-                                                ServerWebExchange change = exchange.mutate().request(targetReq).response(response).build();
-                                                change.getAttributes().put(SESSION_ATTR, session);
-                                                change.getAttributes().put(MamsHttpHeaders.SESSION_ID, sessionId);
-                                                return chain.filter(change)
-                                                        .contextWrite(ctx -> ctx.put(MamsHttpHeaders.USER_TOKEN_KEY, token))
-                                                        .contextWrite(ctx -> ctx.put(MamsHttpHeaders.SESSION_ID, sessionId))
-                                                        ;
-                                            });
+                                    ServerWebExchange change = exchange.mutate().request(targetReq).response(response).build();
+                                    change.getAttributes().put(SESSION_ATTR, session);
+                                    change.getAttributes().put(MamsHttpHeaders.SESSION_ID, sessionId);
+                                    return sessionRepository.saveMono(session)
+                                            .then(Mono.defer(() -> chain.filter(change)
+                                                    .contextWrite(ctx -> ctx.put(MamsHttpHeaders.USER_TOKEN_KEY, token))
+                                                    .contextWrite(ctx -> ctx.put(MamsHttpHeaders.SESSION_ID, sessionId))));
                                 } finally {
                                     MDC.clear();
                                 }

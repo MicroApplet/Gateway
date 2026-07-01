@@ -95,18 +95,19 @@ public class AnnoFilter implements GatewayFilter {
                                 .header(MamsHttpHeaders.OPEN_ID, openid)
                                 .build();
 
+                        ServerWebExchange change = exchange.mutate().request(targetReq).response(response).build();
+                        change.getAttributes().put(SessionCtx.userSessionAttribute, session);
+                        change.getAttributes().put(MamsHttpHeaders.SESSION_ID, sessionId);
+
                         return sessionRepository.saveMono(session)
-                                .flatMap(_ -> {
-                                    ServerWebExchange change = exchange.mutate().request(targetReq).response(response).build();
-                                    change.getAttributes().put(SessionCtx.userSessionAttribute, session);
-                                    change.getAttributes().put(MamsHttpHeaders.SESSION_ID, sessionId);
-
-                                    return chain.filter(change)
-                                            .contextWrite(ctx -> ctx.put(MamsHttpHeaders.USER_TOKEN_KEY, session.getToken()))
-                                            .contextWrite(ctx -> ctx.put(MamsHttpHeaders.SESSION_ID, sessionId))
-                                            ;
-
-                                });
+                                .then(Mono.defer(() -> chain.filter(change)
+                                        .contextWrite(ctx -> {
+                                            if (StringUtils.isNotBlank(session.getToken()))
+                                                return ctx.put(MamsHttpHeaders.USER_TOKEN_KEY, session.getToken());
+                                            return ctx;
+                                        })
+                                        //.contextWrite(ctx -> ctx.put(MamsHttpHeaders.USER_TOKEN_KEY, session.getToken()))
+                                        .contextWrite(ctx -> ctx.put(MamsHttpHeaders.SESSION_ID, sessionId))));
                     } finally {
                         MDC.clear();
                     }

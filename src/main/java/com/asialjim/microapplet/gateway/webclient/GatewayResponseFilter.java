@@ -38,6 +38,7 @@ public class GatewayResponseFilter implements ExchangeFilterFunction {
 
     @Override
     public Mono<ClientResponse> filter(ClientRequest request, ExchangeFunction next) {
+
         return next.exchange(request).flatMap(response -> {
             int status = response.statusCode().value();
             String success = response.headers().asHttpHeaders().getFirst(MamsHttpHeaders.RES_SUCCESS);

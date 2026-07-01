@@ -113,6 +113,8 @@ public class DecryptFilter implements GatewayFilter {
                 .doOnNext(item -> {
                     if (log.isDebugEnabled()) log.debug("获取到用户加密通讯秘钥：{}", item);
                 })
+                // 秘钥缺失时明确报错，避免加密请求被静默放行或返回空响应
+                .switchIfEmpty(Mono.error(AuthenticateResCode.EncryptKeyMiss::ex))
                 .flatMap(key -> decrypt(exchange, key))
                 .flatMap(chain::filter);
     }
@@ -143,11 +145,15 @@ public class DecryptFilter implements GatewayFilter {
 
         ServerHttpRequest urlReq = req.mutate().uri(uri).build();
 
+        // ContentLength <= 0 表示没有请求体，无需请求体解密，原样放行
         long contentLength = headers.getContentLength();
         if (contentLength <= 0) return Mono.just(urlReq);
 
+        // 缺少 Content-Type 时无法定位请求体解密器，原样放行，避免链路静默中断
         MediaType contentType = headers.getContentType();
-        return Mono.justOrEmpty(contentType)
+        if (Objects.isNull(contentType)) return Mono.just(urlReq);
+
+        return Mono.just(contentType)
                 .doOnNext(item -> {
                     if (log.isDebugEnabled()) log.debug("请求体类型：{}", item);
                 })
@@ -155,7 +161,9 @@ public class DecryptFilter implements GatewayFilter {
                 .doOnNext(item -> {
                     if (log.isDebugEnabled()) log.debug("请求体解密器：{}", item);
                 })
-                .flatMap(bodyDecrypter -> decryptRequestBody(key, req, bodyDecrypter, urlReq));
+                .flatMap(bodyDecrypter -> decryptRequestBody(key, req, bodyDecrypter, urlReq))
+                // 未匹配到请求体解密器时原样放行，避免链路静默中断
+                .switchIfEmpty(Mono.just(urlReq));
     }
 
     private Mono<ServerHttpRequest> decryptRequestBody(MamsUserEncKeyResParam key, ServerHttpRequest req, RequestBodyDecrypter<?> bodyDecrypter, ServerHttpRequest urlReq) {

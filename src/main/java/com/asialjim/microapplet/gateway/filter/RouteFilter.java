@@ -68,17 +68,6 @@ public class RouteFilter implements GatewayFilter {
             headers.forEach((k, strings) -> {
                 if (CollectionUtils.isNotEmpty(strings)) {
                     sj.add("\t" + k + "=" + String.join(";", strings));
-//
-//                    if (log.isDebugEnabled())
-//                        sj.add("\t" + k + "=" + String.join(";", strings));
-//                    else
-//                        //noinspection StatementWithEmptyBody
-//                        if (contains(k))
-//                            sj.add("\t" + k + "=" + String.join(";", strings));
-//                        else {
-//                            // do nothing here
-//                        }
-//
                 }
             });
 
@@ -114,7 +103,7 @@ public class RouteFilter implements GatewayFilter {
     }
 
     private static boolean contains(String name) {
-        return names.stream().anyMatch(item -> StringUtils.equalsIgnoreCase(name, item));
+        return names.stream().anyMatch(item ->  item.equalsIgnoreCase(name));
     }
 
     private static final List<String> names =
