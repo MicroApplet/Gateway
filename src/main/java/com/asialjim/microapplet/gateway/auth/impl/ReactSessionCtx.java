@@ -76,6 +76,11 @@ public class ReactSessionCtx implements SessionCtx {
         throw new UnsupportedOperationException("网关服务请使用 saveMono 响应式方法");
     }
 
+    @Override
+    public void login(Session session) {
+        throw new UnsupportedOperationException("响应式环境不支持该操作");
+    }
+
     /**
      * 验签 → 查库，全响应式
      */

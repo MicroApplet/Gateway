@@ -15,6 +15,7 @@
  */
 
 package com.asialjim.microapplet.gateway.filter;
+import com.asialjim.microapplet.session.SessionTokenBean;
 import com.asialjim.microapplet.web.client.MamsHttpHeaders;
 
 import com.asialjim.microapplet.session.SessionCtx;
@@ -103,6 +104,7 @@ public class AuthFilter implements GatewayFilter {
                                     String token = session.getToken();
                                     String traceId = ctxView.get(MamsHttpHeaders.TRACE_ID);
                                     session.setTrace(traceId);
+                                    session.setCsrf(SessionTokenBean.create());
                                     ServerHttpRequest targetReq = exchange.getRequest()
                                             .mutate()
                                             .header(MamsHttpHeaders.SESSION_ID, sessionId)

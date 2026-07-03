@@ -17,6 +17,7 @@
 package com.asialjim.microapplet.gateway.webclient;
 
 import com.asialjim.microapplet.commons.standard.exception.BusinessException;
+import com.asialjim.microapplet.commons.standard.utils.JsonUtil;
 import com.asialjim.microapplet.web.client.MamsHttpHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -51,11 +52,8 @@ public class GatewayResponseFilter implements ExchangeFilterFunction {
             List<String> errs =  new ArrayList<>();
             if (StringUtils.isNotBlank(errsStr)){
                 errsStr = URLDecoder.decode(errsStr, StandardCharsets.UTF_8);
-                errsStr = errsStr.replace("[",StringUtils.EMPTY).replace("]",StringUtils.EMPTY);
-                String[] split = errsStr.split(",");
-                for (String s : split) {
-                    errs.add(s.replace("\"",StringUtils.EMPTY));
-                }
+                List<String> list = JsonUtil.instance.toList(errsStr, String.class);
+                errs.addAll(list);
             }
 
             log.warn("下游服务返回错误: status={}, code={}, msg={}", status, code, msg);

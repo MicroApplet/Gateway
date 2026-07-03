@@ -147,6 +147,10 @@
             <artifactId>spring</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.asialjim.microapplet.commons</groupId>
+            <artifactId>sensitive</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.asialjim.microapplet.web</groupId>
             <artifactId>client</artifactId>
         </dependency>

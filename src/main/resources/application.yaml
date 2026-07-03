@@ -10,7 +10,7 @@ spring:
       - optional:nacos:route.yaml
       - optional:nacos:gateway.yaml
       - optional:nacos:redis.yaml
-      - optional:nacos:sensitive_enc.yaml
+      - optional:nacos:sensitive.yaml
       - optional:nacos:feign.yaml
       - optional:nacos:log.yaml
       - optional:nacos:nacos.yaml

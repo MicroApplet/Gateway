@@ -15,6 +15,7 @@
  */
 
 package com.asialjim.microapplet.gateway.filter;
+
 import com.asialjim.microapplet.web.client.MamsHttpHeaders;
 
 import com.asialjim.microapplet.commons.standard.exception.BusinessException;
@@ -54,6 +55,7 @@ public class RouteFilter implements GatewayFilter {
     }
 
     @Override
+    @SuppressWarnings("NullableProblems")
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String trace = exchange.getAttribute(MamsHttpHeaders.TRACE_ID);
         return Mono.defer(() -> {
@@ -80,7 +82,7 @@ public class RouteFilter implements GatewayFilter {
             ServerWebExchange webExchange = exchange.mutate().response(response).build();
 
             return chain.filter(webExchange)
-                    .doOnSuccess(unused -> response.resHeader(sj))
+                    .doOnSuccess(_ -> response.resHeader(sj))
                     .doOnCancel(() -> sj.add("XXX Request Canceled"))
                     .doOnError(t -> {
                         if (t instanceof BusinessException apiException)
@@ -88,7 +90,8 @@ public class RouteFilter implements GatewayFilter {
                         else
                             sj.add("XXX Request Error: " + t.getMessage());
                     })
-                    .doFinally(signalType -> {
+                    .then()
+                    .doFinally(_ -> {
 
                         try {
                             if (StringUtils.isNotBlank(trace))
